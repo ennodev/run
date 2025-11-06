@@ -10,6 +10,7 @@ type CronJob struct {
 	id           string
 	enabled      bool
 	runFunc      func(gocontext.Context) error
+	initFunc     func(gocontext.Context) error
 	delay        time.Duration
 	timeout      time.Duration
 	logger       ILogger
@@ -38,6 +39,7 @@ func NewCronJob(
 	id string,
 	enabled bool,
 	runFunc func(gocontext.Context) error,
+	initFunc func(gocontext.Context) error,
 	logger ILogger,
 	options ...CronJobOption,
 ) IJob {
@@ -47,6 +49,7 @@ func NewCronJob(
 		enabled:      enabled,
 		delay:        1 * time.Minute, // Default delay of 1 minute
 		runFunc:      runFunc,
+		initFunc:     initFunc,
 		gracefulStop: make(chan struct{}),
 		timeout:      5 * time.Minute, // Default timeout of 5 minutes
 	}
@@ -83,6 +86,19 @@ func (t *CronJob) Run() {
 
 	t.logger.Infof("%v job started, delay: %v, timeout: %v", t.id, t.delay, t.timeout)
 	defer t.logger.Infof("[Run] %v job stopped", t.id)
+
+	// Run initialization function if provided
+	if t.initFunc != nil {
+		t.logger.Infof("%v job initialization started", t.id)
+		initCtx, cancel := gocontext.WithTimeout(gocontext.Background(), t.timeout)
+		err := t.initFunc(initCtx)
+		cancel()
+		if err != nil {
+			t.logger.Errorf("%v job initialization failed: %v", t.id, err)
+			return
+		}
+		t.logger.Infof("%v job initialization completed", t.id)
+	}
 
 	// Create a ticker for periodic execution
 	ticker := time.NewTicker(t.delay)
