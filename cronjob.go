@@ -77,6 +77,26 @@ func (t *CronJob) Enabled() bool {
 	return t.enabled
 }
 
+func (t *CronJob) Init() error {
+	if !t.enabled {
+		t.logger.Infof("%v job is disabled", t.id)
+		return nil
+	}
+	if t.initFunc == nil {
+		t.logger.Infof("%v no initialization function provided, skipping init", t.id)
+		return nil
+	}
+	t.logger.Infof("%v initializing job...", t.id)
+	ctx, cancel := gocontext.WithTimeout(gocontext.Background(), t.timeout)
+	defer cancel()
+	if err := t.initFunc(ctx); err != nil {
+		t.logger.Errorf("%v failed to initialize job: %v", t.id, err)
+		return err
+	}
+	t.logger.Infof("%v initialized job", t.id)
+	return nil
+}
+
 // Run executes the periodic job
 func (t *CronJob) Run() {
 	if !t.enabled {
@@ -86,19 +106,6 @@ func (t *CronJob) Run() {
 
 	t.logger.Infof("%v job started, delay: %v, timeout: %v", t.id, t.delay, t.timeout)
 	defer t.logger.Infof("[Run] %v job stopped", t.id)
-
-	// Run initialization function if provided
-	if t.initFunc != nil {
-		t.logger.Infof("%v job initialization started", t.id)
-		initCtx, cancel := gocontext.WithTimeout(gocontext.Background(), t.timeout)
-		err := t.initFunc(initCtx)
-		cancel()
-		if err != nil {
-			t.logger.Errorf("%v job initialization failed: %v", t.id, err)
-			return
-		}
-		t.logger.Infof("%v job initialization completed", t.id)
-	}
 
 	// Create a ticker for periodic execution
 	ticker := time.NewTicker(t.delay)

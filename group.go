@@ -35,6 +35,24 @@ func (m *Group) Enabled() bool {
 	return m.enabled
 }
 
+func (m *Group) Init() error {
+	m.logger.Infof("%v initializing %v jobs...", m.id, len(m.jobs))
+	for _, t := range m.jobs {
+		if !t.Enabled() {
+			m.logger.Infof("%v job is disabled", t.Id())
+			continue
+		}
+		m.logger.Infof("%v initializing job %v...", m.id, t.Id())
+		if err := t.Init(); err != nil {
+			m.logger.Errorf("%v failed to initialize job %v: %v", m.id, t.Id(), err)
+			return err
+		}
+		m.logger.Infof("%v initialized job %v", m.id, t.Id())
+	}
+	m.logger.Infof("%v initialized %v jobs", m.id, len(m.jobs))
+	return nil
+}
+
 func (m *Group) Run() {
 	if !m.enabled {
 		m.logger.Infof("%v job is disabled", m.id)

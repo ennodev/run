@@ -10,6 +10,7 @@ type Job struct {
 	id           string
 	enabled      bool
 	runFunc      func(gocontext.Context) error
+	initFunc     func(gocontext.Context) error
 	gracefulStop chan struct{}
 	retry        int
 	retryDelay   time.Duration
@@ -38,6 +39,7 @@ func NewJob(
 	id string,
 	enabled bool,
 	runFunc func(gocontext.Context) error,
+	initFunc func(gocontext.Context) error,
 	retry int,
 	logger ILogger,
 	options ...JobOption,
@@ -47,6 +49,7 @@ func NewJob(
 		id:           id,
 		enabled:      enabled,
 		runFunc:      runFunc,
+		initFunc:     initFunc,
 		retry:        retry,
 		retryDelay:   time.Minute,     // Default retry delay of 1 minute
 		timeout:      5 * time.Minute, // Default timeout of 5 minutes
@@ -64,6 +67,26 @@ func (o *Job) Id() string {
 
 func (o *Job) Enabled() bool {
 	return o.enabled
+}
+
+func (o *Job) Init() error {
+	if !o.enabled {
+		o.logger.Infof("%v job is disabled", o.id)
+		return nil
+	}
+	if o.initFunc == nil {
+		o.logger.Infof("%v no initialization function provided, skipping init", o.id)
+		return nil
+	}
+	o.logger.Infof("%v initializing job...", o.id)
+	ctx, cancel := gocontext.WithTimeout(gocontext.Background(), o.timeout)
+	defer cancel()
+	if err := o.initFunc(ctx); err != nil {
+		o.logger.Errorf("%v failed to initialize job: %v", o.id, err)
+		return err
+	}
+	o.logger.Infof("%v initialized job", o.id)
+	return nil
 }
 
 func (o *Job) Run() {
